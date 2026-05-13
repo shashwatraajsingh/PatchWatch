@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import webhook, reports, scan
+from app.routers import webhook, reports, scan, repos
 
 settings = get_settings()
 
@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
     print(f"📡 Webhook endpoint: POST /webhook/github")
     print(f"🔍 Manual scan:      POST /scan/")
     print(f"📄 Reports:          GET  /reports/")
+    print(f"📦 Watched repos:    GET  /repos/")
 
     has_minimax = bool(settings.minimax_api_key)
     has_qwen = bool(settings.openrouter_api_key)
@@ -58,6 +59,7 @@ app.add_middleware(
 app.include_router(webhook.router)
 app.include_router(reports.router)
 app.include_router(scan.router)
+app.include_router(repos.router)
 
 
 @app.get("/", tags=["Health"])
@@ -72,7 +74,8 @@ async def root():
             "manual_scan": "POST /scan/",
             "reports": "GET /reports/",
             "report_detail": "GET /reports/{id}",
-            "report_markdown": "GET /reports/{id}/markdown",
+            "watched_repos": "GET /repos/",
+            "add_repo": "POST /repos/",
             "docs": "GET /docs",
         },
     }

@@ -57,3 +57,23 @@ class CommitMemory(Base):
 
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
+
+
+class WatchedRepo(Base):
+    """
+    A repository registered for automatic webhook-based scanning.
+    Each repo gets its own webhook secret for signature verification.
+    """
+
+    __tablename__ = "watched_repos"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    repo_full_name = Column(String(255), nullable=False, unique=True, index=True)  # e.g. "user/repo"
+    webhook_secret = Column(String(255), nullable=False)          # per-repo HMAC secret
+    branches = Column(JSON, nullable=False, default=["main"])     # branches to scan
+    enabled = Column(Integer, nullable=False, default=1)          # 1=active, 0=paused
+    total_scans = Column(Integer, default=0)
+    last_scan_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
