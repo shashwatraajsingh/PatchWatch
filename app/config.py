@@ -12,6 +12,16 @@ class Settings(BaseSettings):
     github_webhook_secret: str = ""
     github_token: str = ""
 
+    # GitHub OAuth
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    frontend_url: str = "http://localhost:3000"
+
+    # JWT
+    jwt_secret: str = "patchwatch-dev-secret-change-in-prod"
+    jwt_algorithm: str = "HS256"
+    jwt_expiry_hours: int = 24 * 7  # 7 days
+
     # AI Providers
     minimax_api_key: str = ""
     openrouter_api_key: str = ""

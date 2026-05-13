@@ -1,8 +1,10 @@
 """
 Manual Scan Router — for testing without GitHub webhooks.
 Allows you to manually trigger a scan on any public repo+commit.
+Requires authentication — scans are scoped to the logged-in user.
 """
 
+import re
 import time
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -10,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models import ScanReport
+from app.models import ScanReport, User
+from app.auth import get_current_user
 from app.services import github_service
 from app.services.scanner import scan_commit
 from app.services.memory import get_previous_context, save_context, compare_with_previous, build_context_prompt
@@ -22,22 +25,35 @@ from app.utils.diff_parser import parse_commit_files, prioritize_files
 router = APIRouter(prefix="/scan", tags=["Manual Scan"])
 
 
+def extract_repo_name(raw: str) -> str:
+    """Extract 'owner/repo' from a full GitHub URL or return as-is."""
+    match = re.match(r"https?://github\.com/([^/]+/[^/]+?)(?:\.git)?(?:/.*)?$", raw.strip())
+    if match:
+        return match.group(1)
+    return raw.strip()
+
+
 class ManualScanRequest(BaseModel):
-    repo_full_name: str    # e.g. "shashwat/my-repo"
-    commit_sha: str        # full 40-char SHA or short SHA
+    repo_full_name: str
+    commit_sha: str
     branch: str = "main"
 
 
 @router.post("/")
-async def manual_scan(req: ManualScanRequest, db: AsyncSession = Depends(get_db)):
+async def manual_scan(
+    req: ManualScanRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """
     Manually trigger a security scan on a specific commit.
-    Useful for testing or scanning commits that happened before webhook setup.
+    Requires authentication. Results are scoped to the logged-in user.
     """
     start_time = time.time()
+    repo_name = extract_repo_name(req.repo_full_name)
 
-    # 1. Fetch commit from GitHub
-    commit_details = await github_service.get_commit_details(req.repo_full_name, req.commit_sha)
+    # 1. Fetch commit from GitHub (use user's token if available)
+    commit_details = await github_service.get_commit_details(repo_name, req.commit_sha, token=user.github_token)
     if not commit_details:
         return {"status": "error", "message": "Could not fetch commit from GitHub. Check repo name and SHA."}
 
@@ -46,8 +62,10 @@ async def manual_scan(req: ManualScanRequest, db: AsyncSession = Depends(get_db)
     message = commit_data.get("message", "")
     author = commit_data.get("author", {}).get("name", "unknown")
 
-    # Check if this commit was already scanned
-    existing = await db.execute(select(ScanReport).where(ScanReport.commit_sha == sha))
+    # Check if this commit was already scanned by this user
+    existing = await db.execute(
+        select(ScanReport).where(ScanReport.commit_sha == sha, ScanReport.user_id == user.id)
+    )
     existing_report = existing.scalar_one_or_none()
     if existing_report:
         return {
@@ -70,7 +88,7 @@ async def manual_scan(req: ManualScanRequest, db: AsyncSession = Depends(get_db)
         return {"status": "ok", "message": "No scannable files in this commit.", "files_found": len(raw_files)}
 
     # 3. Load previous context
-    previous = await get_previous_context(db, req.repo_full_name, req.branch)
+    previous = await get_previous_context(db, repo_name, req.branch, user_id=user.id)
     context_prompt = build_context_prompt(previous) if previous else None
 
     # 4. Run scan
@@ -86,14 +104,15 @@ async def manual_scan(req: ManualScanRequest, db: AsyncSession = Depends(get_db)
     duration_ms = int((time.time() - start_time) * 1000)
     severity = generate_severity_summary(vulnerabilities)
     report_md = generate_markdown_report(
-        req.repo_full_name, req.branch, sha, message,
+        repo_name, req.branch, sha, message,
         author, vulnerabilities, comparison, len(parsed_files), duration_ms,
     )
-    summary = generate_natural_summary(req.repo_full_name, req.branch, sha, vulnerabilities, comparison)
+    summary = generate_natural_summary(repo_name, req.branch, sha, vulnerabilities, comparison)
 
-    # 7. Save report
+    # 7. Save report (scoped to user)
     report = ScanReport(
-        repo_full_name=req.repo_full_name, branch=req.branch, commit_sha=sha,
+        user_id=user.id,
+        repo_full_name=repo_name, branch=req.branch, commit_sha=sha,
         commit_message=message, author=author,
         vulnerabilities=vulnerabilities, severity_summary=severity,
         report_markdown=report_md,
@@ -107,7 +126,7 @@ async def manual_scan(req: ManualScanRequest, db: AsyncSession = Depends(get_db)
     await db.refresh(report)
 
     # 8. Update memory
-    await save_context(db, req.repo_full_name, req.branch, sha, vulnerabilities, summary)
+    await save_context(db, repo_name, req.branch, sha, vulnerabilities, summary, user_id=user.id)
 
     return {
         "status": "ok",
