@@ -5,6 +5,7 @@ Allows you to manually trigger a scan on any public repo+commit.
 
 import time
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
@@ -44,6 +45,21 @@ async def manual_scan(req: ManualScanRequest, db: AsyncSession = Depends(get_db)
     sha = commit_details.get("sha", req.commit_sha)
     message = commit_data.get("message", "")
     author = commit_data.get("author", {}).get("name", "unknown")
+
+    # Check if this commit was already scanned
+    existing = await db.execute(select(ScanReport).where(ScanReport.commit_sha == sha))
+    existing_report = existing.scalar_one_or_none()
+    if existing_report:
+        return {
+            "status": "ok",
+            "message": "Commit already scanned — returning existing report.",
+            "report_id": existing_report.id,
+            "commit_sha": sha[:8],
+            "vulnerabilities_found": len(existing_report.vulnerabilities),
+            "severity_summary": existing_report.severity_summary,
+            "files_scanned": existing_report.files_scanned,
+            "report_markdown": existing_report.report_markdown,
+        }
 
     # 2. Parse files
     raw_files = commit_details.get("files", [])
