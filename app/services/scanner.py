@@ -1,32 +1,43 @@
 """
 AI Security Scanner — the core brain of PatchWatch.
 
-Uses two models:
-  1. MiniMax M2.7 (primary) — reasoning model, great for deep security analysis
-  2. Qwen 3 Coder via OpenRouter (secondary) — code-focused, catches code-level vulns
+Uses LangChain with two models via NVIDIA API:
+  1. MiniMax M2.7 (primary) — reasoning model for deep security analysis
+  2. Qwen 3 Coder (secondary) — code-focused, catches code-level vulns
 
 Both are called per file, results are merged and deduplicated.
 """
 
 import json
 import hashlib
+import asyncio
+import re
 from typing import Optional
-from openai import AsyncOpenAI
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage
 from app.config import get_settings
 
 settings = get_settings()
 
-# ── AI Clients ─────────────────────────────────────────────────
+# ── LangChain LLM Clients ─────────────────────────────────────
 
-minimax_client = AsyncOpenAI(
+NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+
+minimax_llm = ChatOpenAI(
     api_key=settings.minimax_api_key,
-    base_url="https://api.minimax.io/v1",
-) if settings.minimax_api_key else None
+    base_url=NVIDIA_BASE_URL,
+    model="minimax/minimax-m2.7",
+    temperature=0.1,
+    max_tokens=4096,
+) if settings.minimax_api_key and not settings.minimax_api_key.startswith("your_") else None
 
-qwen_client = AsyncOpenAI(
+qwen_llm = ChatOpenAI(
     api_key=settings.openrouter_api_key,
-    base_url="https://openrouter.ai/api/v1",
-) if settings.openrouter_api_key else None
+    base_url=NVIDIA_BASE_URL,
+    model="qwen/qwen3-coder",
+    temperature=0.1,
+    max_tokens=4096,
+) if settings.openrouter_api_key and not settings.openrouter_api_key.startswith("your_") else None
 
 
 # ── Prompts ────────────────────────────────────────────────────
@@ -71,14 +82,6 @@ Each vulnerability object must have:
   "code_snippet": "the problematic code line(s)"
 }"""
 
-CONTEXT_PROMPT_TEMPLATE = """Previous scan context for this repo+branch:
-{previous_summary}
-
-Known existing issues:
-{existing_issues}
-
-When analyzing, note if any issue is NEW (introduced in this commit) vs RECURRING (already existed)."""
-
 
 def _build_file_prompt(filename: str, changed_lines: str, previous_context: Optional[str] = None) -> str:
     """Build the user prompt for scanning a single file."""
@@ -105,53 +108,23 @@ Return a JSON array of vulnerabilities found. If none, return [].
 
 # ── Scanning Logic ─────────────────────────────────────────────
 
-async def _scan_with_minimax(filename: str, changed_lines: str, context: Optional[str] = None) -> list[dict]:
-    """Scan a file using MiniMax M2.7."""
-    if not minimax_client:
+async def _scan_with_model(llm: ChatOpenAI, model_name: str, filename: str,
+                           changed_lines: str, context: Optional[str] = None) -> list[dict]:
+    """Scan a file using a LangChain ChatOpenAI model."""
+    if not llm:
         return []
 
     try:
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": _build_file_prompt(filename, changed_lines, context)},
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(content=_build_file_prompt(filename, changed_lines, context)),
         ]
 
-        response = await minimax_client.chat.completions.create(
-            model="MiniMax-M2.7",
-            messages=messages,
-            temperature=0.1,  # low temp for consistent analysis
-        )
-
-        content = response.choices[0].message.content
-        return _parse_llm_response(content, filename)
+        response = await llm.ainvoke(messages)
+        return _parse_llm_response(response.content, filename)
 
     except Exception as e:
-        print(f"[MiniMax] Error scanning {filename}: {e}")
-        return []
-
-
-async def _scan_with_qwen(filename: str, changed_lines: str, context: Optional[str] = None) -> list[dict]:
-    """Scan a file using Qwen 3 Coder via OpenRouter."""
-    if not qwen_client:
-        return []
-
-    try:
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": _build_file_prompt(filename, changed_lines, context)},
-        ]
-
-        response = await qwen_client.chat.completions.create(
-            model="qwen/qwen3-coder",
-            messages=messages,
-            temperature=0.1,
-        )
-
-        content = response.choices[0].message.content
-        return _parse_llm_response(content, filename)
-
-    except Exception as e:
-        print(f"[Qwen] Error scanning {filename}: {e}")
+        print(f"[{model_name}] Error scanning {filename}: {e}")
         return []
 
 
@@ -160,16 +133,16 @@ def _parse_llm_response(content: str, fallback_filename: str) -> list[dict]:
     if not content:
         return []
 
+    # Strip thinking tags if present (reasoning models)
+    content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
+
     # Strip markdown code fences if present
-    content = content.strip()
     if content.startswith("```"):
-        # Remove ```json ... ``` wrapper
         lines = content.split("\n")
         content = "\n".join(lines[1:-1]) if len(lines) > 2 else content
 
-    # Try to find JSON array in the response
+    # Direct JSON parse
     try:
-        # Direct parse
         result = json.loads(content)
         if isinstance(result, list):
             return result
@@ -177,8 +150,7 @@ def _parse_llm_response(content: str, fallback_filename: str) -> list[dict]:
     except json.JSONDecodeError:
         pass
 
-    # Try to extract JSON array from mixed content
-    import re
+    # Extract JSON array from mixed content
     match = re.search(r'\[[\s\S]*\]', content)
     if match:
         try:
@@ -200,6 +172,7 @@ def _generate_vuln_id(vuln: dict) -> str:
 def _deduplicate_vulns(all_vulns: list[dict]) -> list[dict]:
     """Merge results from multiple models, removing duplicates."""
     seen = {}
+    severity_order = {"critical": 5, "high": 4, "medium": 3, "low": 2, "info": 1}
 
     for vuln in all_vulns:
         vid = _generate_vuln_id(vuln)
@@ -208,8 +181,6 @@ def _deduplicate_vulns(all_vulns: list[dict]) -> list[dict]:
         if vid not in seen:
             seen[vid] = vuln
         else:
-            # If duplicate, keep the one with higher severity
-            severity_order = {"critical": 5, "high": 4, "medium": 3, "low": 2, "info": 1}
             existing_sev = severity_order.get(seen[vid].get("severity", "info"), 0)
             new_sev = severity_order.get(vuln.get("severity", "info"), 0)
             if new_sev > existing_sev:
@@ -218,34 +189,23 @@ def _deduplicate_vulns(all_vulns: list[dict]) -> list[dict]:
     return list(seen.values())
 
 
-async def scan_file(
-    filename: str,
-    changed_lines: str,
-    previous_context: Optional[str] = None,
-) -> list[dict]:
-    """
-    Scan a single file with both AI models, merge and deduplicate results.
-    """
-    import asyncio
-
-    # Run both models in parallel
-    minimax_task = _scan_with_minimax(filename, changed_lines, previous_context)
-    qwen_task = _scan_with_qwen(filename, changed_lines, previous_context)
+async def scan_file(filename: str, changed_lines: str,
+                    previous_context: Optional[str] = None) -> list[dict]:
+    """Scan a single file with both AI models in parallel, merge and deduplicate."""
+    minimax_task = _scan_with_model(minimax_llm, "MiniMax", filename, changed_lines, previous_context)
+    qwen_task = _scan_with_model(qwen_llm, "Qwen", filename, changed_lines, previous_context)
 
     minimax_results, qwen_results = await asyncio.gather(minimax_task, qwen_task)
 
-    # Merge and deduplicate
     all_vulns = minimax_results + qwen_results
     return _deduplicate_vulns(all_vulns)
 
 
-async def scan_commit(
-    files: list[dict],
-    previous_context: Optional[str] = None,
-) -> list[dict]:
+async def scan_commit(files: list[dict], previous_context: Optional[str] = None) -> list[dict]:
     """
-    Scan all files from a commit. Processes files sequentially to avoid
-    rate limits, but uses both models in parallel per file.
+    Scan all files from a commit.
+    Files are processed sequentially to respect rate limits,
+    but both models run in parallel per file.
     """
     all_vulnerabilities = []
 

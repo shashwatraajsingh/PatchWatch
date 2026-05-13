@@ -18,7 +18,7 @@ def _headers() -> dict:
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "PatchWatch/1.0",
     }
-    if settings.github_token:
+    if settings.github_token and not settings.github_token.startswith("your_"):
         h["Authorization"] = f"Bearer {settings.github_token}"
     return h
 
