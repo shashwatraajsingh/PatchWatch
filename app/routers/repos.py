@@ -1,5 +1,6 @@
 """
 Repos Router — manage repositories registered for automatic webhook scanning.
+All operations are scoped to the authenticated user.
 """
 
 import secrets
@@ -11,7 +12,8 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.database import get_db
-from app.models import WatchedRepo
+from app.models import WatchedRepo, User
+from app.auth import get_current_user
 from app.config import get_settings
 
 router = APIRouter(prefix="/repos", tags=["Watched Repos"])
@@ -19,8 +21,8 @@ settings = get_settings()
 
 
 class AddRepoRequest(BaseModel):
-    repo_full_name: str             # e.g. "shashwat/my-project"
-    branches: list[str] = ["main"]  # branches to auto-scan
+    repo_full_name: str
+    branches: list[str] = ["main"]
 
 
 class UpdateRepoRequest(BaseModel):
@@ -41,10 +43,8 @@ class WatchedRepoResponse(BaseModel):
 
 
 def _to_response(repo: WatchedRepo) -> dict:
-    """Convert a WatchedRepo to response dict with webhook URL."""
     host = settings.host
     port = settings.port
-    # In production this would be your public domain
     webhook_url = f"http://{host}:{port}/webhook/github"
 
     return {
@@ -61,31 +61,39 @@ def _to_response(repo: WatchedRepo) -> dict:
 
 
 @router.get("/")
-async def list_repos(db: AsyncSession = Depends(get_db)):
-    """List all watched repositories."""
-    stmt = select(WatchedRepo).order_by(WatchedRepo.created_at.desc())
+async def list_repos(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """List watched repositories for the authenticated user."""
+    stmt = select(WatchedRepo).where(
+        WatchedRepo.user_id == user.id
+    ).order_by(WatchedRepo.created_at.desc())
     result = await db.execute(stmt)
     repos = result.scalars().all()
     return [_to_response(r) for r in repos]
 
 
 @router.post("/")
-async def add_repo(req: AddRepoRequest, db: AsyncSession = Depends(get_db)):
-    """
-    Register a repository for automatic webhook scanning.
-    Generates a unique webhook secret for this repo.
-    """
-    # Check if already registered
+async def add_repo(
+    req: AddRepoRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Register a repository for automatic webhook scanning."""
     existing = await db.execute(
-        select(WatchedRepo).where(WatchedRepo.repo_full_name == req.repo_full_name)
+        select(WatchedRepo).where(
+            WatchedRepo.repo_full_name == req.repo_full_name,
+            WatchedRepo.user_id == user.id,
+        )
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Repository already registered")
 
-    # Generate a unique webhook secret for this repo
     webhook_secret = secrets.token_hex(32)
 
     repo = WatchedRepo(
+        user_id=user.id,
         repo_full_name=req.repo_full_name,
         webhook_secret=webhook_secret,
         branches=req.branches,
@@ -99,9 +107,13 @@ async def add_repo(req: AddRepoRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{repo_id}")
-async def get_repo(repo_id: int, db: AsyncSession = Depends(get_db)):
+async def get_repo(
+    repo_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Get a watched repository by ID."""
-    stmt = select(WatchedRepo).where(WatchedRepo.id == repo_id)
+    stmt = select(WatchedRepo).where(WatchedRepo.id == repo_id, WatchedRepo.user_id == user.id)
     result = await db.execute(stmt)
     repo = result.scalar_one_or_none()
     if not repo:
@@ -110,9 +122,14 @@ async def get_repo(repo_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/{repo_id}")
-async def update_repo(repo_id: int, req: UpdateRepoRequest, db: AsyncSession = Depends(get_db)):
+async def update_repo(
+    repo_id: int,
+    req: UpdateRepoRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Update a watched repository (branches, enabled/disabled)."""
-    stmt = select(WatchedRepo).where(WatchedRepo.id == repo_id)
+    stmt = select(WatchedRepo).where(WatchedRepo.id == repo_id, WatchedRepo.user_id == user.id)
     result = await db.execute(stmt)
     repo = result.scalar_one_or_none()
     if not repo:
@@ -129,9 +146,13 @@ async def update_repo(repo_id: int, req: UpdateRepoRequest, db: AsyncSession = D
 
 
 @router.delete("/{repo_id}")
-async def remove_repo(repo_id: int, db: AsyncSession = Depends(get_db)):
+async def remove_repo(
+    repo_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Unregister a repository from automatic scanning."""
-    stmt = select(WatchedRepo).where(WatchedRepo.id == repo_id)
+    stmt = select(WatchedRepo).where(WatchedRepo.id == repo_id, WatchedRepo.user_id == user.id)
     result = await db.execute(stmt)
     repo = result.scalar_one_or_none()
     if not repo:
@@ -143,9 +164,13 @@ async def remove_repo(repo_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{repo_id}/regenerate-secret")
-async def regenerate_secret(repo_id: int, db: AsyncSession = Depends(get_db)):
+async def regenerate_secret(
+    repo_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Regenerate the webhook secret for a repository."""
-    stmt = select(WatchedRepo).where(WatchedRepo.id == repo_id)
+    stmt = select(WatchedRepo).where(WatchedRepo.id == repo_id, WatchedRepo.user_id == user.id)
     result = await db.execute(stmt)
     repo = result.scalar_one_or_none()
     if not repo:

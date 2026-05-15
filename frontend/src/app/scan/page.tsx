@@ -4,14 +4,38 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Shield, ArrowLeft, Scan, Loader2, AlertTriangle, CheckCircle, GitBranch, GitCommit } from 'lucide-react';
 import { triggerScan, ManualScanResponse } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 export default function ScanPage() {
+  const { user, loading: authLoading, login } = useAuth();
   const [repo, setRepo] = useState('');
   const [sha, setSha] = useState('');
   const [branch, setBranch] = useState('main');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ManualScanResponse | null>(null);
   const [error, setError] = useState('');
+
+  if (authLoading) {
+    return (
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="w-8 h-8 text-white/10 mx-auto mb-4" />
+          <p className="text-white/30 text-sm font-mono mb-4">AUTHENTICATION REQUIRED</p>
+          <button onClick={login} className="text-xs font-mono text-white/50 border border-white/20 px-6 py-2 hover:border-white/40 hover:text-white transition-colors">
+            SIGN IN WITH GITHUB
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   const handleScan = async () => {
     if (!repo || !sha) return;

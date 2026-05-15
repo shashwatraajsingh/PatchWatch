@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Shield, ArrowLeft, AlertTriangle, CheckCircle, GitCommit, Clock, FileCode, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { Shield, ArrowLeft, AlertTriangle, CheckCircle, GitCommit, Clock, FileCode, ChevronDown, ChevronRight, ExternalLink, Loader2 } from 'lucide-react';
 import { fetchReport, ScanReport, Vulnerability } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 function SeverityBadge({ severity }: { severity: string }) {
   const colors: Record<string, string> = {
@@ -70,18 +71,42 @@ function VulnCard({ vuln, isNew }: { vuln: Vulnerability; isNew: boolean }) {
 }
 
 export default function ReportDetailPage() {
+  const { user, loading: authLoading, login } = useAuth();
   const params = useParams();
   const [report, setReport] = useState<ScanReport | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
     const id = Number(params.id);
     if (!id) return;
     fetchReport(id)
       .then(setReport)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [params.id]);
+  }, [params.id, user]);
+
+  if (authLoading) {
+    return (
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="w-8 h-8 text-white/10 mx-auto mb-4" />
+          <p className="text-white/30 text-sm font-mono mb-4">AUTHENTICATION REQUIRED</p>
+          <button onClick={login} className="text-xs font-mono text-white/50 border border-white/20 px-6 py-2 hover:border-white/40 hover:text-white transition-colors">
+            SIGN IN WITH GITHUB
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   if (loading) {
     return (

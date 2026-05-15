@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Shield, ArrowLeft, Plus, Eye, EyeOff, Trash2, RefreshCw,
-  Copy, Check, GitBranch, Webhook, Clock, Activity
+  Copy, Check, GitBranch, Webhook, Clock, Activity, Loader2
 } from 'lucide-react';
 import {
   fetchWatchedRepos, addWatchedRepo, toggleRepo, deleteRepo,
   regenerateSecret, WatchedRepo
 } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -155,6 +156,7 @@ function RepoCard({
 }
 
 export default function ReposPage() {
+  const { user, loading: authLoading, login } = useAuth();
   const [repos, setRepos] = useState<WatchedRepo[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -171,7 +173,32 @@ export default function ReposPage() {
     setLoading(false);
   };
 
-  useEffect(() => { loadRepos(); }, []);
+  useEffect(() => {
+    if (user) loadRepos();
+  }, [user]);
+
+  if (authLoading) {
+    return (
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="w-8 h-8 text-white/10 mx-auto mb-4" />
+          <p className="text-white/30 text-sm font-mono mb-4">AUTHENTICATION REQUIRED</p>
+          <button onClick={login} className="text-xs font-mono text-white/50 border border-white/20 px-6 py-2 hover:border-white/40 hover:text-white transition-colors">
+            SIGN IN WITH GITHUB
+          </button>
+        </div>
+      </main>
+    );
+  }
+
 
   const handleAdd = async () => {
     if (!newRepo) return;

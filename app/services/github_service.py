@@ -12,18 +12,20 @@ settings = get_settings()
 GITHUB_API = "https://api.github.com"
 
 
-def _headers() -> dict:
-    """Auth headers for GitHub API requests."""
+def _headers(token: Optional[str] = None) -> dict:
+    """Auth headers for GitHub API requests. Uses per-user token if provided."""
     h = {
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "PatchWatch/1.0",
     }
-    if settings.github_token and not settings.github_token.startswith("your_"):
-        h["Authorization"] = f"Bearer {settings.github_token}"
+    # Per-user OAuth token takes priority over global .env token
+    t = token or settings.github_token
+    if t and not t.startswith("your_"):
+        h["Authorization"] = f"Bearer {t}"
     return h
 
 
-async def get_commit_details(repo_full_name: str, commit_sha: str) -> Optional[dict]:
+async def get_commit_details(repo_full_name: str, commit_sha: str, token: Optional[str] = None) -> Optional[dict]:
     """
     Fetch full commit details including file patches from GitHub API.
     GET /repos/{owner}/{repo}/commits/{sha}
@@ -31,7 +33,7 @@ async def get_commit_details(repo_full_name: str, commit_sha: str) -> Optional[d
     url = f"{GITHUB_API}/repos/{repo_full_name}/commits/{commit_sha}"
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(url, headers=_headers())
+        resp = await client.get(url, headers=_headers(token))
 
         if resp.status_code != 200:
             print(f"[GitHub] Failed to fetch commit {commit_sha}: {resp.status_code}")

@@ -1,6 +1,9 @@
+export const runtime = 'edge';
+
 import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/lib/auth-context";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -20,7 +23,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${geistMono.variable} font-mono antialiased bg-black text-white`}>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

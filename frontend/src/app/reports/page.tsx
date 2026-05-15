@@ -2,19 +2,45 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Shield, ArrowLeft, Activity, GitCommit, AlertTriangle, CheckCircle, Clock, FileCode } from 'lucide-react';
+import { Shield, ArrowLeft, Activity, GitCommit, AlertTriangle, CheckCircle, Clock, FileCode, Loader2 } from 'lucide-react';
 import { fetchReports, ScanReportListItem } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 export default function ReportsPage() {
+  const { user, loading: authLoading, login } = useAuth();
   const [reports, setReports] = useState<ScanReportListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
     fetchReports()
       .then(setReports)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [user]);
+
+  if (authLoading) {
+    return (
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <Shield className="w-8 h-8 text-white/10 mx-auto mb-4" />
+          <p className="text-white/30 text-sm font-mono mb-4">AUTHENTICATION REQUIRED</p>
+          <button onClick={login} className="text-xs font-mono text-white/50 border border-white/20 px-6 py-2 hover:border-white/40 hover:text-white transition-colors">
+            SIGN IN WITH GITHUB
+          </button>
+        </div>
+      </main>
+    );
+  }
+
 
   const totalVulns = (r: ScanReportListItem) =>
     Object.values(r.severity_summary).reduce((a, b) => a + b, 0);

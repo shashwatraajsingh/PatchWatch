@@ -1,5 +1,12 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+function authHeaders(): Record<string, string> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("patchwatch_token") : null;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
 export interface Vulnerability {
   id: string;
   severity: "critical" | "high" | "medium" | "low" | "info";
@@ -74,13 +81,13 @@ export async function fetchReports(repo?: string, branch?: string): Promise<Scan
   const params = new URLSearchParams();
   if (repo) params.set("repo", repo);
   if (branch) params.set("branch", branch);
-  const res = await fetch(`${API_BASE}/reports/?${params.toString()}`);
+  const res = await fetch(`${API_BASE}/reports/?${params.toString()}`, { headers: authHeaders() });
   if (!res.ok) throw new Error("Failed to fetch reports");
   return res.json();
 }
 
 export async function fetchReport(id: number): Promise<ScanReport> {
-  const res = await fetch(`${API_BASE}/reports/${id}`);
+  const res = await fetch(`${API_BASE}/reports/${id}`, { headers: authHeaders() });
   if (!res.ok) throw new Error("Report not found");
   return res.json();
 }
@@ -88,7 +95,7 @@ export async function fetchReport(id: number): Promise<ScanReport> {
 export async function triggerScan(req: ManualScanRequest): Promise<ManualScanResponse> {
   const res = await fetch(`${API_BASE}/scan/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify(req),
   });
   if (!res.ok) throw new Error("Scan failed");
@@ -115,7 +122,7 @@ export interface WatchedRepo {
 }
 
 export async function fetchWatchedRepos(): Promise<WatchedRepo[]> {
-  const res = await fetch(`${API_BASE}/repos/`);
+  const res = await fetch(`${API_BASE}/repos/`, { headers: authHeaders() });
   if (!res.ok) throw new Error("Failed to fetch repos");
   return res.json();
 }
@@ -123,7 +130,7 @@ export async function fetchWatchedRepos(): Promise<WatchedRepo[]> {
 export async function addWatchedRepo(repo_full_name: string, branches: string[] = ["main"]): Promise<WatchedRepo> {
   const res = await fetch(`${API_BASE}/repos/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify({ repo_full_name, branches }),
   });
   if (!res.ok) {
@@ -136,7 +143,7 @@ export async function addWatchedRepo(repo_full_name: string, branches: string[] 
 export async function toggleRepo(id: number, enabled: boolean): Promise<WatchedRepo> {
   const res = await fetch(`${API_BASE}/repos/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify({ enabled }),
   });
   if (!res.ok) throw new Error("Failed to update repo");
@@ -144,12 +151,12 @@ export async function toggleRepo(id: number, enabled: boolean): Promise<WatchedR
 }
 
 export async function deleteRepo(id: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/repos/${id}`, { method: "DELETE" });
+  const res = await fetch(`${API_BASE}/repos/${id}`, { method: "DELETE", headers: authHeaders() });
   if (!res.ok) throw new Error("Failed to delete repo");
 }
 
 export async function regenerateSecret(id: number): Promise<WatchedRepo> {
-  const res = await fetch(`${API_BASE}/repos/${id}/regenerate-secret`, { method: "POST" });
+  const res = await fetch(`${API_BASE}/repos/${id}/regenerate-secret`, { method: "POST", headers: authHeaders() });
   if (!res.ok) throw new Error("Failed to regenerate secret");
   return res.json();
 }

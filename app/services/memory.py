@@ -8,13 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import CommitMemory
 
 
-async def get_previous_context(db: AsyncSession, repo_full_name: str, branch: str) -> Optional[dict]:
-    """Load last scan context for a repo+branch. Returns None if first scan."""
+async def get_previous_context(db: AsyncSession, repo_full_name: str, branch: str, user_id: int = None) -> Optional[dict]:
+    """Load last scan context for a repo+branch, optionally scoped by user."""
     stmt = (
         select(CommitMemory)
         .where(CommitMemory.repo_full_name == repo_full_name)
         .where(CommitMemory.branch == branch)
     )
+    if user_id is not None:
+        stmt = stmt.where(CommitMemory.user_id == user_id)
     result = await db.execute(stmt)
     memory = result.scalar_one_or_none()
 
@@ -29,8 +31,9 @@ async def get_previous_context(db: AsyncSession, repo_full_name: str, branch: st
 
 
 async def save_context(db: AsyncSession, repo_full_name: str, branch: str,
-                        commit_sha: str, vulnerabilities: list[dict], summary: str):
-    """Upsert commit memory for a repo+branch."""
+                        commit_sha: str, vulnerabilities: list[dict], summary: str,
+                        user_id: int = None):
+    """Upsert commit memory for a repo+branch, optionally scoped by user."""
     fingerprints = [
         {
             "id": v.get("id", ""),
@@ -47,6 +50,8 @@ async def save_context(db: AsyncSession, repo_full_name: str, branch: str,
         .where(CommitMemory.repo_full_name == repo_full_name)
         .where(CommitMemory.branch == branch)
     )
+    if user_id is not None:
+        stmt = stmt.where(CommitMemory.user_id == user_id)
     result = await db.execute(stmt)
     memory = result.scalar_one_or_none()
 
@@ -56,6 +61,7 @@ async def save_context(db: AsyncSession, repo_full_name: str, branch: str,
         memory.summary = summary
     else:
         memory = CommitMemory(
+            user_id=user_id,
             repo_full_name=repo_full_name, branch=branch, commit_sha=commit_sha,
             vulnerability_fingerprints=fingerprints, summary=summary,
         )

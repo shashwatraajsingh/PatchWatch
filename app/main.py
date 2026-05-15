@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import webhook, reports, scan, repos
+from app.routers import webhook, reports, scan, repos, auth
 
 settings = get_settings()
 
@@ -22,9 +22,13 @@ async def lifespan(app: FastAPI):
     await init_db()
     print("✅ Database initialized")
     print(f"📡 Webhook endpoint: POST /webhook/github")
+    print(f"🔐 Auth:             GET  /auth/github")
     print(f"🔍 Manual scan:      POST /scan/")
     print(f"📄 Reports:          GET  /reports/")
     print(f"📦 Watched repos:    GET  /repos/")
+
+    has_oauth = bool(settings.github_client_id and settings.github_client_secret)
+    print(f"🔑 GitHub OAuth:     {'✅ configured' if has_oauth else '❌ not configured'}")
 
     has_minimax = bool(settings.minimax_api_key)
     has_qwen = bool(settings.openrouter_api_key)
@@ -56,6 +60,7 @@ app.add_middleware(
 )
 
 # Register routers
+app.include_router(auth.router)
 app.include_router(webhook.router)
 app.include_router(reports.router)
 app.include_router(scan.router)
@@ -70,12 +75,13 @@ async def root():
         "status": "running",
         "description": "AI-powered security vulnerability scanner for GitHub commits",
         "endpoints": {
+            "auth_login": "GET /auth/github",
+            "auth_callback": "POST /auth/github/callback",
+            "auth_me": "GET /auth/me",
             "webhook": "POST /webhook/github",
             "manual_scan": "POST /scan/",
             "reports": "GET /reports/",
-            "report_detail": "GET /reports/{id}",
             "watched_repos": "GET /repos/",
-            "add_repo": "POST /repos/",
             "docs": "GET /docs",
         },
     }
