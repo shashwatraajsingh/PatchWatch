@@ -20,12 +20,12 @@ async def lifespan(app: FastAPI):
     """Startup: create DB tables. Shutdown: cleanup."""
     print("🛡️  PatchWatch starting up...")
     await init_db()
-    print("✅ Database initialized")
-    print(f"📡 Webhook endpoint: POST /webhook/github")
-    print(f"🔐 Auth:             GET  /auth/github")
-    print(f"🔍 Manual scan:      POST /scan/")
-    print(f"📄 Reports:          GET  /reports/")
-    print(f"📦 Watched repos:    GET  /repos/")
+    print(" Database initialized")
+    print(f" Webhook endpoint: POST /webhook/github")
+    print(f" Auth:             GET  /auth/github")
+    print(f" Manual scan:      POST /scan/")
+    print(f" Reports:          GET  /reports/")
+    print(f" Watched repos:    GET  /repos/")
 
     has_oauth = bool(settings.github_client_id and settings.github_client_secret)
     print(f"🔑 GitHub OAuth:     {'✅ configured' if has_oauth else '❌ not configured'}")
