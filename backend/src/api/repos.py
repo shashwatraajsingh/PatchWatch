@@ -11,10 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
 
-from app.database import get_db
-from app.models import WatchedRepo, User
-from app.auth import get_current_user
-from app.config import get_settings
+from src.database.session import get_db
+from src.models.domain import WatchedRepo, User
+from src.core.auth import get_current_user
+from src.core.config import get_settings
 
 router = APIRouter(prefix="/repos", tags=["Watched Repos"])
 settings = get_settings()
@@ -43,9 +43,10 @@ class WatchedRepoResponse(BaseModel):
 
 
 def _to_response(repo: WatchedRepo) -> dict:
-    host = settings.host
-    port = settings.port
-    webhook_url = f"http://{host}:{port}/webhook/github"
+    if settings.backend_url:
+        webhook_url = f"{settings.backend_url.rstrip('/')}/webhook/github"
+    else:
+        webhook_url = f"http://{settings.host}:{settings.port}/webhook/github"
 
     return {
         "id": repo.id,

@@ -13,10 +13,10 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
-from app.database import get_db
-from app.models import User
-from app.auth import create_token, get_current_user
+from src.core.config import get_settings
+from src.database.session import get_db
+from src.models.domain import User
+from src.core.auth import create_token, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 settings = get_settings()

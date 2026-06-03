@@ -15,7 +15,9 @@ class Settings(BaseSettings):
     # GitHub OAuth
     github_client_id: str = ""
     github_client_secret: str = ""
-    frontend_url: str = "http://localhost:3000"
+    # Webhook / External URL
+    backend_url: str = ""
+    frontend_url: str = "https://patchwatch-frontend.pages.dev"
 
     # JWT
     jwt_secret: str = "patchwatch-dev-secret-change-in-prod"
@@ -33,7 +35,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": (".env", "../.env"), "env_file_encoding": "utf-8"}
 
 
 @lru_cache()

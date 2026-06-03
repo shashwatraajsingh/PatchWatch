@@ -5,7 +5,7 @@ Memory Service — stores and retrieves commit context for cross-commit comparis
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import CommitMemory
+from src.models.domain import CommitMemory
 
 
 async def get_previous_context(db: AsyncSession, repo_full_name: str, branch: str, user_id: int = None) -> Optional[dict]:

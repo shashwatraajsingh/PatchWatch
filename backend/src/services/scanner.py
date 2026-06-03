@@ -15,7 +15,7 @@ import re
 from typing import Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
-from app.config import get_settings
+from src.core.config import get_settings
 
 settings = get_settings()
 

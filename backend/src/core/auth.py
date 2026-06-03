@@ -9,9 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError
 
-from app.config import get_settings
-from app.database import get_db
-from app.models import User
+from src.core.config import get_settings
+from src.database.session import get_db
+from src.models.domain import User
 
 settings = get_settings()
 

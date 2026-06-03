@@ -8,10 +8,10 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
-from app.database import get_db
-from app.models import ScanReport, User
-from app.auth import get_current_user
-from app.schemas import ScanReportResponse, ScanReportListItem
+from src.database.session import get_db
+from src.models.domain import ScanReport, User
+from src.core.auth import get_current_user
+from src.models.schemas import ScanReportResponse, ScanReportListItem
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 

@@ -11,16 +11,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
-from app.database import get_db
-from app.models import ScanReport, User
-from app.auth import get_current_user
-from app.services import github_service
-from app.services.scanner import scan_commit
-from app.services.memory import get_previous_context, save_context, compare_with_previous, build_context_prompt
-from app.services.report_generator import (
+from src.database.session import get_db
+from src.models.domain import ScanReport, User
+from src.core.auth import get_current_user
+from src.services import github_service
+from src.services.scanner import scan_commit
+from src.services.memory import get_previous_context, save_context, compare_with_previous, build_context_prompt
+from src.services.report_generator import (
     generate_severity_summary, generate_natural_summary, generate_markdown_report,
 )
-from app.utils.diff_parser import parse_commit_files, prioritize_files
+from src.utils.diff_parser import parse_commit_files, prioritize_files
 
 router = APIRouter(prefix="/scan", tags=["Manual Scan"])
 

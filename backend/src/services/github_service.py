@@ -5,7 +5,7 @@ Handles webhook payload parsing.
 
 import httpx
 from typing import Optional
-from app.config import get_settings
+from src.core.config import get_settings
 
 settings = get_settings()
 

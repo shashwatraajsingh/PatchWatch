@@ -10,16 +10,16 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from sqlalchemy import select
 
-from app.config import get_settings
-from app.models import ScanReport, WatchedRepo
-from app.schemas import WebhookResponse
-from app.services import github_service
-from app.services.scanner import scan_commit
-from app.services.memory import get_previous_context, save_context, compare_with_previous, build_context_prompt
-from app.services.report_generator import (
+from src.core.config import get_settings
+from src.models.domain import ScanReport, WatchedRepo
+from src.models.schemas import WebhookResponse
+from src.services import github_service
+from src.services.scanner import scan_commit
+from src.services.memory import get_previous_context, save_context, compare_with_previous, build_context_prompt
+from src.services.report_generator import (
     generate_severity_summary, generate_natural_summary, generate_markdown_report,
 )
-from app.utils.diff_parser import parse_commit_files, prioritize_files
+from src.utils.diff_parser import parse_commit_files, prioritize_files
 
 router = APIRouter(prefix="/webhook", tags=["Webhook"])
 settings = get_settings()
@@ -39,7 +39,7 @@ def verify_signature(payload_body: bytes, signature: str, secret: str) -> bool:
 
 async def _run_scan_pipeline(payload: dict, repo_full_name: str):
     """The full scan pipeline — runs as a background task with its own DB session."""
-    from app.database import async_session
+    from src.database.session import async_session
 
     async with async_session() as db:
         start_time = time.time()
@@ -187,7 +187,7 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
     repo_full_name = payload.get("repository", {}).get("full_name", "")
 
     # Try to find this repo in watched repos for per-repo secret
-    from app.database import async_session
+    from src.database.session import async_session
     async with async_session() as db:
         result = await db.execute(
             select(WatchedRepo).where(WatchedRepo.repo_full_name == repo_full_name)

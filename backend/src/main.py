@@ -8,9 +8,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
-from app.database import init_db
-from app.routers import webhook, reports, scan, repos, auth
+from src.core.config import get_settings
+from src.database.session import init_db
+from src.api import webhook, reports, scan, repos, auth
 
 settings = get_settings()
 

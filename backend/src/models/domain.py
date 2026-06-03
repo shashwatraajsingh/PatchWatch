@@ -9,7 +9,7 @@ SQLAlchemy models for PatchWatch.
 
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey
-from app.database import Base
+from src.database.session import Base
 
 
 class User(Base):
