@@ -37,6 +37,17 @@ export default function HomePage() {
       <div className="absolute bottom-0 left-0 w-12 h-12 border-b-2 border-l-2 border-white/30 z-20" />
       <div className="absolute bottom-0 right-0 w-12 h-12 border-b-2 border-r-2 border-white/30 z-20" />
 
+      {/* Render Environment Warning Box */}
+      <div className="hidden lg:flex absolute top-24 right-8 z-20 border border-white/20 p-4 bg-black/80 backdrop-blur max-w-xs flex-col gap-2">
+        <div className="flex items-center gap-2 text-yellow-500/80">
+          <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+          <h3 className="text-xs font-mono font-bold tracking-wider">TEST ENVIRONMENT</h3>
+        </div>
+        <p className="text-white/40 text-[10px] font-mono leading-relaxed">
+          Hosted on Render's free tier. The SQLite database is <strong className="text-white/60">ephemeral</strong> and will be erased whenever the server sleeps.
+        </p>
+      </div>
+
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 border-b border-white/10">
         <div className="container mx-auto px-8 py-4 flex items-center justify-between">
